@@ -515,8 +515,23 @@ What can I do for you today?</div>
     return fresh;
   })();
 
-  const WS_URL = `ws://${location.hostname}:8080/?userId=${USER_ID}`;
-  const API_URL = `http://${location.hostname}:3000`;
+  // RAILWAY FIX: Dynamic port detection — works on localhost AND production
+  // Automatically discovers the correct port instead of hardcoding
+  const getBaseUrl = () => {
+    const protocol = location.protocol; // 'http:' or 'https:'
+    const hostname = location.hostname; // 'localhost' or 'your-app.railway.app'
+    const port = location.port; // '3000' (dev) or '' (production)
+    
+    const baseUrl = port 
+      ? `${protocol}//${hostname}:${port}`
+      : `${protocol}//${hostname}`;
+    
+    return baseUrl;
+  };
+
+  const BASE_URL = getBaseUrl();
+  const WS_URL = `${BASE_URL.replace('http:', 'ws:').replace('https:', 'wss:')}/?userId=${USER_ID}`;
+  const API_URL = BASE_URL;
 
   let ws;
   let isWaiting = false;
@@ -672,7 +687,7 @@ What can I do for you today?</div>
     typingEl = document.createElement("div");
     typingEl.className = "typing";
     typingEl.innerHTML = `
-      <div class="msg-avatar" style="background:linear-gradient(135deg,#c8f04a,#8ee000);color:#0a0a0f;font-family:Syne,sans-serif;font-weight:800;font-size:12px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;">E</div>
+      <div class="msg-avatar" style="background:linear-gradient(135deg,#c8f04a,#8ee000);color:#0a0a0f;font-family:Syne,sans-serif;font-weight:800;font-size:12px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;">A</div>
       <div class="typing-dots"><span></span><span></span><span></span></div>
     `;
     window.appendChild(typingEl);
