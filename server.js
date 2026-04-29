@@ -8,11 +8,14 @@
  * FIX 3: Order ID collision    — each order has a UUID; updates are order-scoped
  * FIX 4: OpenAI state rollback — state snapshot before every AI call; restored on failure
  * FIX 5: WS heartbeat + reconnect + stage replay — order status survives disconnection
+ *
+ * RAILWAY FIX: Both HTTP and WebSocket run on the same PORT
  */
 
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import http from "http";
 import { WebSocketServer } from "ws";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -29,17 +32,19 @@ dotenv.config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ─── Express ──────────────────────────────────────────────────────────────────
+// ─── Express ──────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(join(__dirname, "public")));
 
-// ─── WebSocket — Fix 5: Map of Sets for multi-connection per user ─────────────
-const WS_PORT = process.env.WS_PORT || 8080;
-const wss = new WebSocketServer({ port: WS_PORT });
+// ─── Create HTTP Server ───────────────────────────────────────────────────
+const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
 
-// Fix 1 upgrade: Use Map<userId, Set<WebSocket>> for clean pool management
+// ─── WebSocket — Attach to Same HTTP Server ──────────────────────────────
+// Fix: Map<userId, Set<WebSocket>> for clean pool management
+const wss = new WebSocketServer({ server });
 const clients = new Map();
 
 function addClient(userId, ws) {
@@ -98,7 +103,7 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-// ─── Main Chat Route ──────────────────────────────────────────────────────────
+// ─── Main Chat Route ───────────────────────────────────────────────────────
 app.post("/chat", async (req, res) => {
   const { message: rawMessage, userId } = req.body;
 
@@ -159,7 +164,7 @@ app.post("/chat", async (req, res) => {
       // Fix 3 + 5: Pass orderId and stage-update callback to simulateOrderFlow
       simulateOrderFlow(orderId, orderId, clients, session, markDirty.bind(null, userId));
 
-      const reply = "Order placed! Relax, your food go land soon \uD83D\uDE04 I'll keep you posted.";
+      const reply = "Order placed! Relax, your food go land soon 😄 I'll keep you posted.";
       session.history.push({ role: "assistant", content: reply });
       markDirty(userId);
       return res.json({ reply });
@@ -205,7 +210,7 @@ app.post("/chat", async (req, res) => {
     return res.json({ reply });
   }
 
-  // ── 3. Greeting ──────────────────────────────────────────────────────────────
+  // ── 3. Greeting ───────────────────────────────────────────────────────────
   if (data.intent === "greeting") {
     const context = session.memory.lastOrder
       ? `User has ordered before from ${session.memory.lastOrder.vendor}.`
@@ -218,7 +223,7 @@ app.post("/chat", async (req, res) => {
     return res.json({ reply });
   }
 
-  // ── 4. Check status ──────────────────────────────────────────────────────────
+  // ── 4. Check status ───────────────────────────────────────────────────────
   if (data.intent === "check_status") {
     if (!session.memory.lastOrder) {
       const reply = "You don't have any active orders. What would you like to order?";
@@ -280,7 +285,7 @@ app.post("/chat", async (req, res) => {
     return res.json({ reply });
   }
 
-  // ── 7. Cancel ────────────────────────────────────────────────────────────────
+  // ── 7. Cancel ───────────────────────────────────────────────────────────────
   if (data.intent === "cancel") {
     if (session.state.awaitingConfirmation || session.state.intent) {
       session.state = createSession().state;
@@ -350,7 +355,7 @@ app.post("/chat", async (req, res) => {
     const result = chooseFood(session.state.items, session.state.budget);
 
     if (result.error === "over_budget") {
-      const reply = `Cheapest I found for ${session.state.items.join(" and ")} is ${formatPrice(result.cheapestAvailable)} from ${result.cheapestVendor} — above your ${formatPrice(session.state.budget)}. Want to adjust your budget?`;
+      const reply = `Cheapest I found for ${session.state.items.join(" and ")} is ${formatPrice(result.cheapestAvailable)} from ${result.cheapestVendor} — above your ${formatPrice(session.state.budget)}. Want me to suggest something cheaper?`;
       session.state.budget = null;
       session.history.push({ role: "assistant", content: reply });
       markDirty(userId);
@@ -369,7 +374,7 @@ app.post("/chat", async (req, res) => {
     session.state.choice = best;
     session.state.awaitingConfirmation = true;
 
-    const reply = `This looks like the best option within your budget:\n\n\uD83C\uDFEA ${best.vendor}\n\uD83D\uDCB0 ${formatPrice(best.price)} (incl. delivery)\n\u23F1\uFE0F ${best.delivery_time}\n\u2B50 ${best.rating}/5 rating\n\nWant me to go ahead?`;
+    const reply = `This looks like the best option within your budget:\n\n🏪 ${best.vendor}\n💰 ${formatPrice(best.price)} (incl. delivery)\n⏱️ ${best.delivery_time}\n\nShall I go ahead?`;
     session.history.push({ role: "assistant", content: reply });
     markDirty(userId);
     return res.json({ reply, showOptions: result.options });
@@ -395,7 +400,7 @@ app.get("/logs/:userId", (req, res) => {
   });
 });
 
-// ─── Health check ─────────────────────────────────────────────────────────────
+// ─── Health check ───────────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
   res.json({
     status: "ASA is live",
@@ -404,11 +409,10 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ─── Start ────────────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+// ─── Start Both HTTP and WebSocket on Single Port ──────────────────────────
+server.listen(PORT, () => {
   console.log(`\n ASA — Adaptive Smart Assistant`);
   console.log(` HTTP: http://localhost:${PORT}`);
-  console.log(` WS:   ws://localhost:${WS_PORT}`);
+  console.log(` WS:   ws://localhost:${PORT}`);
   console.log(` Logs: http://localhost:${PORT}/logs/:userId\n`);
 });
