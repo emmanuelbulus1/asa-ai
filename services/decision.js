@@ -1,11 +1,20 @@
 import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import path from "path";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const vendors = JSON.parse(
-  readFileSync(join(__dirname, "../data/mockVendors.json"), "utf-8")
-);
+// Load vendors with proper path handling
+let vendors = [];
+
+try {
+  const vendorsPath = path.join(process.cwd(), "data", "mockVendors.json");
+  console.log(`[Decision] Loading vendors from: ${vendorsPath}`);
+  
+  vendors = JSON.parse(readFileSync(vendorsPath, "utf-8"));
+  console.log(`[Decision] Successfully loaded ${vendors.length} vendors`);
+} catch (err) {
+  console.error(`[Decision] ⚠️ Failed to load vendors:`, err.message);
+  console.error(`[Decision] Using empty vendor list. App will still run but orders will fail.`);
+  vendors = [];
+}
 
 export function chooseFood(requestedItems, budget) {
   if (!requestedItems || requestedItems.length === 0) {
@@ -57,4 +66,4 @@ export function chooseFood(requestedItems, budget) {
 
 export function formatPrice(amount) {
   return `₦${amount.toLocaleString("en-NG")}`;
-    }
+}
