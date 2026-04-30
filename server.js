@@ -1,14 +1,13 @@
 /**
- * server.js — ASA: Adaptive Smart Assistant
+ * server.js â€” ASA: Adaptive Smart Assistant
  *
  * All 5 fixes applied:
  *
- * FIX 1: Session persistence   — sessions survive server restarts via file storage
- * FIX 2: Stable userId         — client sends localStorage userId, not random per-load
- * FIX 3: Order ID collision    — each order has a UUID; updates are order-scoped
- * FIX 4: OpenAI state rollback — state snapshot before every AI call; restored on failure
- * FIX 5: WS heartbeat + reconnect + stage replay — order status survives disconnection
- *
+ * FIX 1: Session persistence   â€” sessions survive server restarts via file storage
+ * FIX 2: Stable userId         â€” client sends localStorage userId, not random per-load
+ * FIX 3: Order ID collision    â€” each order has a UUID; updates are order-scoped
+ * FIX 4: OpenAI state rollback â€” state snapshot before every AI call; restored on failure
+ * FIX 5: WS heartbeat + reconnect + stage replay â€” order status survives disconnection
  * RAILWAY FIX: Both HTTP and WebSocket run on the same PORT
  */
 
@@ -33,27 +32,25 @@ dotenv.config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ─── Express ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Express â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(join(__dirname, "public")));
 
-// ─── FIX 1: Serve Frontend Files ──────────────────────────────────────────
-// Serve index.html and other static files from root
+// â”€â”€â”€ FIX 1: Serve Frontend Files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.use(express.static(process.cwd()));
 
-// Default route — show index.html
+// Default route â€” show index.html
 app.get("/", (req, res) => {
   res.sendFile(path.join(process.cwd(), "index.html"));
 });
 
-// ─── Create HTTP Server ───────────────────────────────────────────────────
+// â”€â”€â”€ Create HTTP Server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 
-// ─── WebSocket — Attach to Same HTTP Server ──────────────────────────────
-// Fix: Map<userId, Set<WebSocket>> for clean pool management
+// â”€â”€â”€ WebSocket â€” Attach to Same HTTP Server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const wss = new WebSocketServer({ server });
 const clients = new Map();
 
@@ -77,7 +74,7 @@ wss.on("connection", (ws, req) => {
   addClient(userId, ws);
   console.log(`[WS] ${userId} connected (${clients.get(userId)?.size} socket/s)`);
 
-  // Fix 5: On reconnect — immediately replay current order stage if active
+  // Fix 5: On reconnect â€” immediately replay current order stage if active
   const session = getSession(userId);
   if (session.memory.currentOrderStage && session.memory.currentOrderId) {
     ws.send(JSON.stringify({
@@ -87,7 +84,7 @@ wss.on("connection", (ws, req) => {
     }));
   }
 
-  // Fix 5: Heartbeat — ping every 30s, client must pong within 10s
+  // Fix 5: Heartbeat â€” ping every 30s, client must pong within 10s
   const pingInterval = setInterval(() => {
     if (ws.readyState === 1) {
       ws.send(JSON.stringify({ type: "ping" }));
@@ -113,7 +110,7 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-// ─── Main Chat Route ───────────────────────────────────────────────────────
+// â”€â”€â”€ Main Chat Route â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.post("/chat", async (req, res) => {
   const { message: rawMessage, userId } = req.body;
 
@@ -128,14 +125,14 @@ app.post("/chat", async (req, res) => {
   // Fix 5 (rate limit): 20 messages per minute per user
   if (isRateLimited(userId)) {
     return res.status(429).json({
-      reply: "Easy there — you're sending too fast. Give me a second."
+      reply: "Easy there â€” you're sending too fast. Give me a second."
     });
   }
 
   const session = getSession(userId);
   session.history.push({ role: "user", content: message });
 
-  // ── 1. Awaiting confirmation — handle YES/NO first, before any AI call ──────
+  // â”€â”€ 1. Awaiting confirmation â€” handle YES/NO first, before any AI call â”€â”€â”€â”€â”€â”€
   if (session.state.awaitingConfirmation) {
     const lower = message.toLowerCase();
     const isYes = /\b(yes|yeah|yep|sure|go|okay|ok|do it|order|correct|proceed|yh|ye)\b/.test(lower);
@@ -174,7 +171,7 @@ app.post("/chat", async (req, res) => {
       // Fix 3 + 5: Pass orderId and stage-update callback to simulateOrderFlow
       simulateOrderFlow(orderId, orderId, clients, session, markDirty.bind(null, userId));
 
-      const reply = "Order placed! Relax, your food go land soon 😄 I'll keep you posted.";
+      const reply = "Order placed! Relax, your food go land soon ðŸ˜„ I'll keep you posted.";
       session.history.push({ role: "assistant", content: reply });
       markDirty(userId);
       return res.json({ reply });
@@ -186,7 +183,7 @@ app.post("/chat", async (req, res) => {
 
       const variations = [
         "No wahala at all. Tell me what you'd prefer instead.",
-        "All good — what would you like instead?",
+        "All good â€” what would you like instead?",
         "Sorted. Just say the word when you're ready."
       ];
       const reply = variations[Math.floor(Math.random() * variations.length)];
@@ -196,7 +193,7 @@ app.post("/chat", async (req, res) => {
     }
   }
 
-  // ── 2. Extract intent — Fix 4: snapshot state before AI call ────────────────
+  // â”€â”€ 2. Extract intent â€” Fix 4: snapshot state before AI call â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const stateSnapshot = JSON.parse(JSON.stringify(session.state));
 
   let data;
@@ -204,10 +201,10 @@ app.post("/chat", async (req, res) => {
     const raw = await extractIntent(message, session.history);
     data = validateIntent(raw);
   } catch (err) {
-    // Fix 4: restore snapshot — AI failure cannot corrupt state
+    // Fix 4: restore snapshot â€” AI failure cannot corrupt state
     session.state = stateSnapshot;
     console.error("[Chat] Intent extraction error:", err.message);
-    const reply = "Sorry, I had a momentary glitch. No wahala — just say that again.";
+    const reply = "Sorry, I had a momentary glitch. No wahala â€” just say that again.";
     session.history.push({ role: "assistant", content: reply });
     markDirty(userId);
     return res.json({ reply });
@@ -220,7 +217,7 @@ app.post("/chat", async (req, res) => {
     return res.json({ reply });
   }
 
-  // ── 3. Greeting ───────────────────────────────────────────────────────────
+  // â”€â”€ 3. Greeting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (data.intent === "greeting") {
     const context = session.memory.lastOrder
       ? `User has ordered before from ${session.memory.lastOrder.vendor}.`
@@ -233,7 +230,7 @@ app.post("/chat", async (req, res) => {
     return res.json({ reply });
   }
 
-  // ── 4. Check status ───────────────────────────────────────────────────────
+  // â”€â”€ 4. Check status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (data.intent === "check_status") {
     if (!session.memory.lastOrder) {
       const reply = "You don't have any active orders. What would you like to order?";
@@ -243,18 +240,17 @@ app.post("/chat", async (req, res) => {
     }
     const stage = session.memory.currentOrderStage;
     const reply = stage
-      ? `Your order from ${session.memory.lastOrder.vendor} — current status: ${stage.msg}`
-      : `Last order was from ${session.memory.lastOrder.vendor} — ${formatPrice(session.memory.lastOrder.amount)}.`;
+      ? `Your order from ${session.memory.lastOrder.vendor} â€” current status: ${stage.msg}`
+      : `Last order was from ${session.memory.lastOrder.vendor} â€” ${formatPrice(session.memory.lastOrder.amount)}.`;
     session.history.push({ role: "assistant", content: reply });
     markDirty(userId);
     return res.json({ reply });
   }
 
-  // ── 5. Price check — "how much is rice and chicken?" ─────────────────────────
+  // â”€â”€ 5. Price check â€” "how much is rice and chicken?" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (data.intent === "price_check") {
     if (data.items.length > 0) {
-      // Try the decision engine first — real data is always better than estimates
-      const result = chooseFood(data.items, null); // no budget filter
+      const result = chooseFood(data.items, null);
       if (result.error === null) {
         const prices = result.options.map(o => formatPrice(o.price));
         const range = prices.length > 1
@@ -266,40 +262,38 @@ app.post("/chat", async (req, res) => {
         return res.json({ reply });
       }
     }
-    // Graceful fallback — item not in our platform, be honest + redirect
     const itemStr = data.items.length > 0 ? data.items.join(" and ") : "that";
-    const reply = `I don't have ${itemStr} on our current platforms, but I can find you something similar. What are you in the mood for — something light, a full meal, or a snack?`;
+    const reply = `I don't have ${itemStr} on our current platforms, but I can find you something similar. What are you in the mood for â€” something light, a full meal, or a snack?`;
     session.history.push({ role: "assistant", content: reply });
     markDirty(userId);
     return res.json({ reply });
   }
 
-  // ── 6. Food advice — "suggest something", "what should I eat?" ───────────────
+  // â”€â”€ 6. Food advice â€” "suggest something", "what should I eat?" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (data.intent === "food_advice") {
-    // Use time of day to give a contextual recommendation
     const hour = new Date().getHours();
     let mealContext;
-    if (hour < 11)      mealContext = "breakfast — something light and quick";
-    else if (hour < 15) mealContext = "lunch — something filling";
+    if (hour < 11)      mealContext = "breakfast â€” something light and quick";
+    else if (hour < 15) mealContext = "lunch â€” something filling";
     else if (hour < 18) mealContext = "an afternoon snack";
-    else                mealContext = "dinner — something satisfying";
+    else                mealContext = "dinner â€” something satisfying";
 
     const reply = await generateReply(
-      `User wants food advice for ${mealContext} in Nigeria. 
-       Suggest ONE specific Nigerian meal confidently, in 1-2 sentences. 
-       Then ask if they want you to find it. 
-       Be warm, direct, and specific — not generic.`
+      `User wants food advice for ${mealContext} in Nigeria.
+       Suggest ONE specific Nigerian meal confidently, in 1-2 sentences.
+       Then ask if they want you to find it.
+       Be warm, direct, and specific â€” not generic.`
     );
     session.history.push({ role: "assistant", content: reply });
     markDirty(userId);
     return res.json({ reply });
   }
 
-  // ── 7. Cancel ───────────────────────────────────────────────────────────────
+  // â”€â”€ 7. Cancel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (data.intent === "cancel") {
     if (session.state.awaitingConfirmation || session.state.intent) {
       session.state = createSession().state;
-      const reply = "Order cancelled. No wahala — let me know when you're ready.";
+      const reply = "Order cancelled. No wahala â€” let me know when you're ready.";
       session.history.push({ role: "assistant", content: reply });
       markDirty(userId);
       return res.json({ reply });
@@ -309,7 +303,7 @@ app.post("/chat", async (req, res) => {
     return res.json({ reply });
   }
 
-  // ── 8. Food order ────────────────────────────────────────────────────────────
+  // â”€â”€ 8. Food order â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (data.intent === "order_food") {
 
     if (data.items.length > 0) session.state.items = data.items;
@@ -321,7 +315,7 @@ app.post("/chat", async (req, res) => {
       session.state.budget = session.memory.preferences.usualBudget;
     }
 
-    // Smart default: "order my usual" — goosebumps moment
+    // Smart default: "order my usual" â€” goosebumps moment
     const isUsual = /\b(usual|same|again|repeat|last time)\b/.test(message.toLowerCase());
     if (isUsual && session.memory.lastOrder) {
       const last = session.memory.lastOrder;
@@ -335,7 +329,7 @@ app.post("/chat", async (req, res) => {
       session.state.budget = last.amount;
       session.state.awaitingConfirmation = true;
 
-      const reply = `Got you — your usual from ${last.vendor}, ${formatPrice(last.amount)}. Want me to go ahead?`;
+      const reply = `Got you â€” your usual from ${last.vendor}, ${formatPrice(last.amount)}. Want me to go ahead?`;
       session.history.push({ role: "assistant", content: reply });
       markDirty(userId);
       return res.json({ reply });
@@ -355,7 +349,7 @@ app.post("/chat", async (req, res) => {
 
     if (!session.state.budget) {
       const itemList = session.state.items.join(" and ");
-      const reply = `Got it — ${itemList}. How much is your budget including delivery?`;
+      const reply = `Got it â€” ${itemList}. How much is your budget including delivery?`;
       session.history.push({ role: "assistant", content: reply });
       markDirty(userId);
       return res.json({ reply });
@@ -365,7 +359,7 @@ app.post("/chat", async (req, res) => {
     const result = chooseFood(session.state.items, session.state.budget);
 
     if (result.error === "over_budget") {
-      const reply = `Cheapest I found for ${session.state.items.join(" and ")} is ${formatPrice(result.cheapestAvailable)} from ${result.cheapestVendor} — above your ${formatPrice(session.state.budget)}. Want me to suggest something cheaper?`;
+      const reply = `Cheapest I found for ${session.state.items.join(" and ")} is ${formatPrice(result.cheapestAvailable)} from ${result.cheapestVendor} â€” above your ${formatPrice(session.state.budget)}. Want to adjust your budget?`;
       session.state.budget = null;
       session.history.push({ role: "assistant", content: reply });
       markDirty(userId);
@@ -384,13 +378,13 @@ app.post("/chat", async (req, res) => {
     session.state.choice = best;
     session.state.awaitingConfirmation = true;
 
-    const reply = `This looks like the best option within your budget:\n\n🏪 ${best.vendor}\n💰 ${formatPrice(best.price)} (incl. delivery)\n⏱️ ${best.delivery_time}\n\nShall I go ahead?`;
+    const reply = `This looks like the best option within your budget:\n\nðŸª ${best.vendor}\nðŸ’° ${formatPrice(best.price)} (incl. delivery)\nâ±ï¸ ${best.delivery_time}\nâ­ ${best.rating}/5 rating\n\nWant me to go ahead?`;
     session.history.push({ role: "assistant", content: reply });
     markDirty(userId);
     return res.json({ reply, showOptions: result.options });
   }
 
-  // ── 9. Unknown fallback ──────────────────────────────────────────────────────
+  // â”€â”€ 9. Unknown fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const reply = await generateReply(
     `User said: "${message}". You handle food orders. Respond helpfully as Asa and guide them to what you can do.`
   );
@@ -399,7 +393,7 @@ app.post("/chat", async (req, res) => {
   return res.json({ reply });
 });
 
-// ─── Logs (judge demo dashboard) ─────────────────────────────────────────────
+// â”€â”€â”€ Logs (judge demo dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.get("/logs/:userId", (req, res) => {
   const session = getSession(req.params.userId);
   return res.json({
@@ -410,7 +404,7 @@ app.get("/logs/:userId", (req, res) => {
   });
 });
 
-// ─── Health check ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Health check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.get("/health", (req, res) => {
   res.json({
     status: "ASA is live",
@@ -419,10 +413,9 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ─── Start Both HTTP and WebSocket on Single Port ──────────────────────────
+// â”€â”€â”€ Start Both HTTP and WebSocket on Single Port â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 server.listen(PORT, () => {
-  console.log(`\n ASA — Adaptive Smart Assistant`);
-  console.log(` HTTP: http://localhost:${PORT}`);
-  console.log(` WS:   ws://localhost:${PORT}`);
+  console.log(`\n ASA â€” Adaptive Smart Assistant`);
+  console.log(` HTTP + WS: http://localhost:${PORT}`);
   console.log(` Logs: http://localhost:${PORT}/logs/:userId\n`);
 });
